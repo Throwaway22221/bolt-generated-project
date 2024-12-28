@@ -52,7 +52,7 @@ const markAsRead = async (token, messages) => {
       headers: {
         'Content-Type': 'application/json',
       },
-    })
+    }))
   };
 
   const response = await fetchWithTimeout(`${graphApiEndpoint}/$batch`, {
