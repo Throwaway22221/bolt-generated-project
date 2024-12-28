@@ -1,26 +1,26 @@
 {
-      "name": "email-downloader",
-      "private": true,
-      "version": "0.0.0",
-      "type": "module",
-      "scripts": {
-        "dev": "vite",
-        "build": "vite build",
-        "preview": "vite preview"
-      },
-      "dependencies": {
-        "@azure/msal-browser": "^3.11.0",
-        "@microsoft/microsoft-graph-client": "^3.0.5",
-        "isomorphic-fetch": "^3.0.0",
-        "react": "^18.2.0",
-        "react-dom": "^18.2.0",
-        "node-fetch": "^2.7.0",
-        "https-proxy-agent": "^5.0.1"
-      },
-      "devDependencies": {
-        "@types/react": "^18.0.28",
-        "@types/react-dom": "^18.0.11",
-        "@vitejs/plugin-react": "^4.2.0",
-        "vite": "^5.2.0"
-      }
-    }
+  "name": "email-client",
+  "version": "0.1.0",
+  "description": "Email client with OAuth for Microsoft accounts",
+  "main": "electron.cjs",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@azure/msal-browser": "^3.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.4",
+    "electron": "^25.3.2",
+    "vite": "^4.4.9",
+    "concurrently": "^8.2.0"
+  }
+}

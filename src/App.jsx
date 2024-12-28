@@ -1,346 +1,266 @@
 import React, { useState, useEffect } from 'react';
-    import { PublicClientApplication } from '@azure/msal-browser';
-    import { Client } from '@microsoft/microsoft-graph-client';
-    import 'isomorphic-fetch';
-    import Tabs from './components/Tabs';
-    import AccountTab from './components/AccountTab';
-    import SettingsTab from './components/SettingsTab';
-    import EmailTab from './components/EmailTab';
-    import LoadingIndicator from './components/LoadingIndicator';
-    import AuthSection from './components/AuthSection';
-    import SyncSection from './components/SyncSection';
-    import LogSection from './components/LogSection';
-    import { HttpsProxyAgent } from 'https-proxy-agent';
-    import fetch from 'node-fetch';
+import { signIn, signOut, handleRedirect, getToken, getAllAccounts } from './auth';
+import { fetchEmails, fetchEmailContent, deleteEmail } from './api';
+import { getSettings, saveSettings } from './settings';
+import SettingsTab from './SettingsTab';
+import scheduleEmailCheck, { startBackgroundSync, stopBackgroundSync } from './scheduler';
+import AccountTab from './AccountTab';
+import { invalidateCache, getCachedEmails } from './cache';
+import AccountButtons from './components/AccountButtons';
+import TabButtons from './components/TabButtons';
+import EmailSection from './components/EmailSection';
+import './App.css';
 
-    const msalConfig = {
-      auth: {
-        clientId: 'YOUR_CLIENT_ID', // Replace with your client ID
-        authority: 'https://login.microsoftonline.com/common',
-        redirectUri: 'http://localhost:5173'
+/**
+ * Main application component.
+ */
+function App() {
+  // State variables
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [emails, setEmails] = useState({});
+  const [selectedEmail, setSelectedEmail] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredEmails, setFilteredEmails] = useState({});
+  const [theme, setTheme] = useState('light');
+  const [activeTab, setActiveTab] = useState('emails');
+  const [accounts, setAccounts] = useState({});
+  const [syncIntervalId, setSyncIntervalId] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Load settings and set theme on mount
+  useEffect(() => {
+    const storedSettings = getSettings();
+    setTheme(storedSettings.theme);
+    document.body.classList.toggle('dark-theme', storedSettings.theme === 'dark');
+
+    // Event listeners for online/offline status
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      const account = await handleRedirect();
+      if (account) {
+        setIsAuthenticated(true);
+        setUser(account);
       }
     };
+    checkAuthentication();
+  }, []);
 
-    const msalInstance = new PublicClientApplication(msalConfig);
-
-    const defaultSettings = {
-      minWaitTime: 3000,
-      maxWaitTime: 10000,
-      apiCallLimit: 5,
-      syncInterval: 600000,
-      concurrentConnections: 1,
+  // Fetch accounts on mount
+  useEffect(() => {
+    const fetchAccounts = () => {
+      const storedAccounts = getAllAccounts();
+      setAccounts(storedAccounts);
     };
+    fetchAccounts();
+  }, []);
 
-    function App() {
-      const [accounts, setAccounts] = useState([]);
-      const [selectedAccount, setSelectedAccount] = useState(null);
-      const [emails, setEmails] = useState([]);
-      const [settings, setSettings] = useState(defaultSettings);
-      const [syncing, setSyncing] = useState(false);
-      const [logs, setLogs] = useState([]);
-      const [loading, setLoading] = useState(false);
-      const [proxySettings, setProxySettings] = useState({
-        host: '',
-        port: '',
-        username: '',
-        password: '',
-      });
+  // Sign in handler
+  const handleSignIn = async () => {
+    await signIn();
+  };
 
-      useEffect(() => {
-        setLoading(true);
-        msalInstance.handleRedirectPromise().then((response) => {
-          if (response) {
-            addAccount(response.account);
-            logMessage('Authentication successful.');
-          }
-        }).catch((error) => {
-          console.error('Authentication error:', error);
-          logMessage(`Authentication error: ${error.message}`);
-        }).finally(() => {
-          setLoading(false);
-        });
-        loadAccounts();
-        loadSettings();
-        loadProxySettings();
-      }, []);
-
-      useEffect(() => {
-        if (selectedAccount && !syncing) {
-          startBackgroundSync();
-        }
-      }, [selectedAccount, syncing, settings]);
-
-      const logMessage = (message) => {
-        setLogs((prevLogs) => [...prevLogs, message]);
-      };
-
-      const loadAccounts = () => {
-        const storedAccounts = JSON.parse(localStorage.getItem('accounts')) || [];
-        setAccounts(storedAccounts);
-      };
-
-      const loadSettings = () => {
-        const storedSettings = JSON.parse(localStorage.getItem('settings')) || defaultSettings;
-        setSettings({
-          ...storedSettings,
-          minWaitTime: storedSettings.minWaitTime,
-          maxWaitTime: storedSettings.maxWaitTime,
-          syncInterval: storedSettings.syncInterval,
-        });
-      };
-
-      const loadProxySettings = () => {
-        const storedProxySettings = JSON.parse(localStorage.getItem('proxySettings')) || {
-          host: '',
-          port: '',
-          username: '',
-          password: '',
-        };
-        setProxySettings(storedProxySettings);
-      };
-
-      const addAccount = (newAccount) => {
-        if (!accounts.find(acc => acc.id === newAccount.id)) {
-          const updatedAccounts = [...accounts, newAccount];
-          setAccounts(updatedAccounts);
-          localStorage.setItem('accounts', JSON.stringify(updatedAccounts));
-        }
-      };
-
-      const removeAccount = (accountId) => {
-        const updatedAccounts = accounts.filter(acc => acc.id !== accountId);
-        setAccounts(updatedAccounts);
-        localStorage.setItem('accounts', JSON.stringify(updatedAccounts));
-        if (selectedAccount?.id === accountId) {
-          setSelectedAccount(null);
-          setEmails([]);
-        }
-      };
-
-      const handleLogin = async () => {
-        setLoading(true);
-        try {
-          const loginResponse = await msalInstance.loginPopup({
-            scopes: ['user.read', 'mail.read']
-          });
-          addAccount(loginResponse.account);
-          logMessage('Login successful.');
-        } catch (error) {
-          console.error('Login error:', error);
-          logMessage(`Login error: ${error.message}`);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      const handleLogout = async () => {
-        try {
-          await msalInstance.logoutPopup();
-          setAccounts([]);
-          setSelectedAccount(null);
-          setEmails([]);
-          logMessage('Logout successful.');
-        } catch (error) {
-          console.error('Logout error:', error);
-          logMessage(`Logout error: ${error.message}`);
-        }
-      };
-
-      const initializeGraphClient = async (account) => {
-        try {
-          const options = {};
-          if (proxySettings.host && proxySettings.port) {
-            const proxyUrl = `http://${proxySettings.username ? `${proxySettings.username}:${proxySettings.password}@` : ''}${proxySettings.host}:${proxySettings.port}`;
-            const proxyAgent = new HttpsProxyAgent(proxyUrl);
-            options.fetchOptions = {
-              agent: proxyAgent,
-            };
-          }
-          const client = Client.init({
-            authProvider: async (done) => {
-              try {
-                const silentRequest = {
-                  scopes: ['user.read', 'mail.read'],
-                  account: account
-                };
-                const response = await msalInstance.acquireTokenSilent(silentRequest);
-                done(null, response.accessToken);
-              } catch (error) {
-                if (error.name === 'InteractionRequiredAuthError') {
-                  msalInstance.acquireTokenPopup({
-                    scopes: ['user.read', 'mail.read'],
-                    account: account
-                  }).then(response => {
-                    done(null, response.accessToken);
-                  }).catch(popupError => {
-                    console.error('Popup error:', popupError);
-                    logMessage(`Popup error: ${popupError.message}`);
-                    done(popupError, null);
-                  });
-                } else {
-                  console.error('Token acquisition error:', error);
-                  logMessage(`Token acquisition error: ${error.message}`);
-                  done(error, null);
-                }
-              }
-            },
-            ...options,
-          });
-          return client;
-        } catch (error) {
-          console.error('Graph client initialization error:', error);
-          logMessage(`Graph client initialization error: ${error.message}`);
-          throw error;
-        }
-      };
-
-      const saveEmailToFile = async (account, email, emailBody) => {
-        const fs = require('fs').promises;
-        const accountIdentifier = account.username.replace(/[^a-zA-Z0-9]/g, '-');
-        const emailDir = `emails/${accountIdentifier}`;
-
-        try {
-          await fs.mkdir(emailDir, { recursive: true });
-
-          const senderEmail = email.from.emailAddress.address.replace(/[^a-zA-Z0-9@.]/g, '_');
-          const subject = email.subject.replace(/[^a-zA-Z0-9]/g, '_');
-          const date = new Date(email.receivedDateTime);
-          const formattedDate = `${date.toLocaleString('default', { month: 'short' })}-${date.getDate()}-${date.getFullYear().toString().slice(-2)}`;
-          const fileName = `${senderEmail}_${subject}_${formattedDate}.eml`;
-          const filePath = `${emailDir}/${fileName}`;
-
-          await fs.writeFile(filePath, emailBody);
-          logMessage(`Email saved to ${filePath}`);
-        } catch (error) {
-          console.error('Error saving email to file:', error);
-          logMessage(`Error saving email to file: ${error.message}`);
-        }
-      };
-
-      const fetchEmails = async (account) => {
-        if (!account) return;
-        setSyncing(true);
-        try {
-          const client = await initializeGraphClient(account);
-          let fetchedCount = 0;
-          let continueFetching = true;
-          while (continueFetching) {
-            const response = await client.api('/me/messages')
-              .select('subject,from,receivedDateTime,body')
-              .top(settings.apiCallLimit)
-              .skip(fetchedCount)
-              .get();
-
-            if (response.value.length === 0) {
-              continueFetching = false;
-              break;
-            }
-
-            const emailPromises = response.value.map(async (email) => {
-              try {
-                const emailResponse = await client.api(`/me/messages/${email.id}`)
-                  .get();
-                await saveEmailToFile(account, email, emailResponse.body.content);
-                return {
-                  ...email,
-                  body: emailResponse.body.content,
-                };
-              } catch (error) {
-                console.error(`Error fetching email body for ${email.id}:`, error);
-                logMessage(`Error fetching email body for ${email.id}: ${error.message}`);
-                return null;
-              }
-            });
-
-            const emailsWithBodies = (await Promise.all(emailPromises)).filter(email => email !== null);
-            setEmails(prevEmails => [...prevEmails, ...emailsWithBodies]);
-            fetchedCount += response.value.length;
-
-            if (response.value.length < settings.apiCallLimit) {
-              continueFetching = false;
-            }
-
-            const randomWait = Math.random() * (settings.maxWaitTime - settings.minWaitTime) + settings.minWaitTime;
-            await new Promise(resolve => setTimeout(resolve, randomWait));
-          }
-        } catch (error) {
-          console.error('Error fetching emails:', error);
-          logMessage(`Error fetching emails: ${error.message}`);
-        } finally {
-          setSyncing(false);
-        }
-      };
-
-      const handleAccountSelect = (account) => {
-        setSelectedAccount(account);
-        setEmails([]);
-      };
-
-      const handleSettingsChange = (event) => {
-        const { name, value } = event.target;
-        const updatedSettings = { ...settings, [name]: parseInt(value, 10) * 1000 };
-        setSettings(updatedSettings);
-        localStorage.setItem('settings', JSON.stringify(updatedSettings));
-      };
-
-      const handleResetSettings = () => {
-        setSettings(defaultSettings);
-        localStorage.setItem('settings', JSON.stringify(defaultSettings));
-      };
-
-      const handleProxySettingsChange = (event) => {
-        const { name, value } = event.target;
-        const updatedProxySettings = { ...proxySettings, [name]: value };
-        setProxySettings(updatedProxySettings);
-        localStorage.setItem('proxySettings', JSON.stringify(updatedProxySettings));
-      };
-
-      const startBackgroundSync = () => {
-        if (syncing) return;
-        if (!selectedAccount) return;
-        setSyncing(true);
-        try {
-          const syncIntervalId = setInterval(() => {
-            fetchEmails(selectedAccount);
-          }, settings.syncInterval);
-
-          return () => clearInterval(syncIntervalId);
-        } catch (error) {
-          console.error('Error starting background sync:', error);
-          logMessage(`Error starting background sync: ${error.message}`);
-          setSyncing(false);
-        }
-      };
-
-      return (
-        <div className="container">
-          <LoadingIndicator isLoading={loading} message="Loading..." />
-          <AuthSection handleLogin={handleLogin} handleLogout={handleLogout} loading={loading} accounts={accounts} />
-          <Tabs>
-            <AccountTab
-              label="Accounts"
-              accounts={accounts}
-              handleAccountSelect={handleAccountSelect}
-              removeAccount={removeAccount}
-            />
-            <SettingsTab
-              label="Settings"
-              settings={settings}
-              handleSettingsChange={handleSettingsChange}
-              handleResetSettings={handleResetSettings}
-              proxySettings={proxySettings}
-              handleProxySettingsChange={handleProxySettingsChange}
-            />
-            <EmailTab
-              label="Emails"
-              emails={emails}
-              selectedAccount={selectedAccount}
-            />
-          </Tabs>
-          <SyncSection selectedAccount={selectedAccount} startBackgroundSync={startBackgroundSync} syncing={syncing} />
-          <LogSection logs={logs} />
-        </div>
-      );
+  // Sign out handler
+  const handleSignOut = async (username) => {
+    await signOut(username);
+    setIsAuthenticated(false);
+    setUser(null);
+    setEmails({});
+    setSelectedEmail(null);
+    const storedAccounts = getAllAccounts();
+    setAccounts(storedAccounts);
+    if (syncIntervalId) {
+      stopBackgroundSync(syncIntervalId);
+      setSyncIntervalId(null);
     }
+  };
 
-    export default App;
+  // Fetch emails on authentication and user change
+  useEffect(() => {
+    const fetchEmailData = async () => {
+      if (isAuthenticated && user) {
+        setLoading(true);
+        setError(null);
+        try {
+          const token = await getToken(user.username);
+          if (token) {
+            let fetchedEmails;
+            if (isOnline) {
+              fetchedEmails = await fetchEmails(token, user.username);
+            } else {
+              fetchedEmails = getCachedEmails(user.username) || [];
+            }
+            setEmails((prevEmails) => ({
+              ...prevEmails,
+              [user.username]: fetchedEmails,
+            }));
+            setFilteredEmails((prevFilteredEmails) => ({
+              ...prevFilteredEmails,
+              [user.username]: fetchedEmails,
+            }));
+          }
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchEmailData();
+  }, [isAuthenticated, user, isOnline]);
+
+  // Start background sync on authentication, user change, and online status
+  useEffect(() => {
+    if (isAuthenticated && user && isOnline) {
+      scheduleEmailCheck(user, setEmails, setFilteredEmails, setLoading, setError);
+      const intervalId = startBackgroundSync(user, setEmails, setFilteredEmails, setLoading, setError);
+      setSyncIntervalId(intervalId);
+    }
+    return () => {
+      if (syncIntervalId) {
+        stopBackgroundSync(syncIntervalId);
+      }
+    };
+  }, [isAuthenticated, user, isOnline]);
+
+  // Handle email selection
+  const handleSelectEmail = async (messageId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await getToken(user.username);
+      if (token) {
+        const emailContent = await fetchEmailContent(token, messageId);
+        setSelectedEmail(emailContent);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle search
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (query) {
+      const filtered = Object.entries(emails).reduce((acc, [username, userEmails]) => {
+        const filteredUserEmails = userEmails.filter(email =>
+          email.subject.toLowerCase().includes(query.toLowerCase()) ||
+          email.from.emailAddress.name.toLowerCase().includes(query.toLowerCase())
+        );
+        if (filteredUserEmails.length > 0) {
+          acc[username] = filteredUserEmails;
+        }
+        return acc;
+      }, {});
+      setFilteredEmails(filtered);
+    } else {
+      setFilteredEmails(emails);
+    }
+  };
+
+  // Toggle theme handler
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    document.body.classList.toggle('dark-theme', newTheme === 'dark');
+    saveSettings({ ...getSettings(), theme: newTheme });
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+  };
+
+  // Handle account change
+  const handleAccountChange = (account) => {
+    setUser(account);
+    setIsAuthenticated(true);
+  };
+
+  // Handle email deletion
+  const handleDeleteEmail = async (username, messageId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await getToken(username);
+      if (token) {
+        await deleteEmail(token, messageId);
+        setEmails((prevEmails) => {
+          const updatedEmails = { ...prevEmails };
+          if (updatedEmails[username]) {
+            updatedEmails[username] = updatedEmails[username].filter(email => email.id !== messageId);
+          }
+          return updatedEmails;
+        });
+        setFilteredEmails((prevFilteredEmails) => {
+          const updatedFilteredEmails = { ...prevFilteredEmails };
+           if (updatedFilteredEmails[username]) {
+            updatedFilteredEmails[username] = updatedFilteredEmails[username].filter(email => email.id !== messageId);
+          }
+          return updatedFilteredEmails;
+        });
+        invalidateCache(username);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={`app-container ${theme === 'dark' ? 'dark-theme' : ''}`}>
+      <div className="header">
+        <h1>Email Client</h1>
+        <AccountButtons
+          accounts={accounts}
+          onAccountChange={handleAccountChange}
+          onSignIn={handleSignIn}
+          isAuthenticated={isAuthenticated}
+        />
+        <div style={{ color: isOnline ? 'green' : 'red' }}>
+          {isOnline ? 'Online' : 'Offline'}
+        </div>
+      </div>
+      <TabButtons activeTab={activeTab} onTabChange={handleTabChange} />
+      <div className="content-area">
+        {activeTab === 'emails' && isAuthenticated && user && (
+          <EmailSection
+            user={user}
+            onSignOut={handleSignOut}
+            toggleTheme={toggleTheme}
+            searchQuery={searchQuery}
+            onSearch={handleSearch}
+            loading={loading}
+            error={error}
+            filteredEmails={filteredEmails}
+            onSelectEmail={handleSelectEmail}
+            selectedEmail={selectedEmail}
+            onDeleteEmail={handleDeleteEmail}
+          />
+        )}
+        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'accounts' && <AccountTab accounts={accounts} onSignIn={handleSignIn} />}
+      </div>
+    </div>
+  );
+}
+
+export default App;
