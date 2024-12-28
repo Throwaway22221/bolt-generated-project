@@ -29,7 +29,14 @@ const useEmail = (user, isOnline) => {
           if (isOnline) {
             fetchedEmails = await fetchEmails(token, user.username);
           } else {
-            fetchedEmails = getCachedEmails(user.username) || [];
+            try {
+              fetchedEmails = getCachedEmails(user.username) || [];
+            } catch (cacheError) {
+              log(`Error fetching emails from cache:`, cacheError);
+              setError(cacheError.message || 'Failed to fetch emails from cache');
+              setLoading(false);
+              return;
+            }
           }
           setEmails((prevEmails) => ({
             ...prevEmails,

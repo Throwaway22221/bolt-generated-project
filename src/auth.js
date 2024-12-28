@@ -145,14 +145,8 @@ export const getToken = async (username) => {
     log(`Token acquired silently for user: ${username}`);
     return response.accessToken;
   } catch (error) {
-    if (error instanceof msal.InteractionRequiredAuthError) {
-      log(`Silent token acquisition failed for user: ${username}`);
-      return null;
-    } else {
-      log(`Error during token acquisition for user: ${username}`, error);
-      console.error("Error during token acquisition:", error);
-      return null;
-    }
+    log(`Error during silent token acquisition for user: ${username}`, error);
+    return null;
   }
 };
 

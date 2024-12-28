@@ -5,12 +5,25 @@ import globalQueue from './queue';
 
 const graphApiEndpoint = "https://graph.microsoft.com/v1.0/me";
 
+const fetchWithTimeout = async (url, options, timeout = 10000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+};
+
 const fetchAllMessages = async (token, folderId) => {
   let allMessages = [];
   let nextLink = `${graphApiEndpoint}/mailFolders/${folderId}/messages?$top=50&$select=id,subject,from,toRecipients,isRead,receivedDateTime`;
 
   while (nextLink) {
-    const response = await fetch(nextLink, {
+    const response = await fetchWithTimeout(nextLink, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -42,7 +55,7 @@ const markAsRead = async (token, messages) => {
     })
   };
 
-  const response = await fetch(`${graphApiEndpoint}/$batch`, {
+  const response = await fetchWithTimeout(`${graphApiEndpoint}/$batch`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -53,6 +66,15 @@ const markAsRead = async (token, messages) => {
 
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const batchData = await response.json();
+  if (batchData.responses) {
+    batchData.responses.forEach(res => {
+      if (res.status >= 400) {
+        log(`Error marking message as read: ${res.id}, status: ${res.status}, body: ${JSON.stringify(res.body)}`);
+      }
+    });
   }
 };
 
@@ -66,7 +88,7 @@ export const fetchEmails = async (token, username) => {
 
   const apiCall = async () => {
     log(`Fetching emails from API for user: ${username}`);
-    const response = await fetch(`${graphApiEndpoint}/mailFolders`, {
+    const response = await fetchWithTimeout(`${graphApiEndpoint}/mailFolders`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -103,7 +125,7 @@ export const fetchEmails = async (token, username) => {
 export const fetchEmailContent = async (token, messageId) => {
   log(`Fetching email content for message ID: ${messageId}`);
   const apiCall = async () => {
-    const response = await fetch(`${graphApiEndpoint}/messages/${messageId}`, {
+    const response = await fetchWithTimeout(`${graphApiEndpoint}/messages/${messageId}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -126,7 +148,7 @@ export const fetchEmailContent = async (token, messageId) => {
 export const deleteEmail = async (token, messageId) => {
   log(`Deleting email with message ID: ${messageId}`);
   const apiCall = async () => {
-    const response = await fetch(`${graphApiEndpoint}/messages/${messageId}`, {
+    const response = await fetchWithTimeout(`${graphApiEndpoint}/messages/${messageId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`,
