@@ -5,7 +5,7 @@
   "main": "electron.mjs",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"wait-on dist/index.html && electron .\"",
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron ."
@@ -22,6 +22,8 @@
     "@vitejs/plugin-react": "^4.0.4",
     "electron": "^25.3.2",
     "vite": "^4.4.9",
-    "jest": "^29.6.2"
+    "jest": "^29.6.2",
+    "concurrently": "^8.2.0",
+    "wait-on": "^7.0.1"
   }
 }
