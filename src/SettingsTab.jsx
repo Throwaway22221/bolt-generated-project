@@ -8,6 +8,9 @@ function SettingsTab() {
   const [syncInterval, setSyncInterval] = useState(300);
   const [maxRetries, setMaxRetries] = useState(3);
   const [retryDelay, setRetryDelay] = useState(1);
+  const [fontSize, setFontSize] = useState(16);
+  const [primaryColor, setPrimaryColor] = useState('#3498db');
+  const [secondaryColor, setSecondaryColor] = useState('#2ecc71');
 
   useEffect(() => {
     const settings = getSettings();
@@ -17,6 +20,9 @@ function SettingsTab() {
     setSyncInterval(settings.syncInterval || 300);
     setMaxRetries(settings.maxRetries || 3);
     setRetryDelay(settings.retryDelay || 1);
+    setFontSize(settings.fontSize || 16);
+    setPrimaryColor(settings.primaryColor || '#3498db');
+    setSecondaryColor(settings.secondaryColor || '#2ecc71');
   }, []);
 
   const handleSaveSettings = () => {
@@ -28,6 +34,9 @@ function SettingsTab() {
       syncInterval: parseInt(syncInterval, 10),
       maxRetries: parseInt(maxRetries, 10),
       retryDelay: parseInt(retryDelay, 10),
+      fontSize: parseInt(fontSize, 10),
+      primaryColor: primaryColor,
+      secondaryColor: secondaryColor,
     });
     alert('Settings saved!');
   };
@@ -92,6 +101,36 @@ function SettingsTab() {
             type="number"
             value={retryDelay}
             onChange={(e) => setRetryDelay(e.target.value)}
+          />
+        </label>
+      </div>
+      <div>
+        <label>
+          Font Size (px):
+          <input
+            type="number"
+            value={fontSize}
+            onChange={(e) => setFontSize(e.target.value)}
+          />
+        </label>
+      </div>
+      <div>
+        <label>
+          Primary Color:
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+          />
+        </label>
+      </div>
+      <div>
+        <label>
+          Secondary Color:
+          <input
+            type="color"
+            value={secondaryColor}
+            onChange={(e) => setSecondaryColor(e.target.value)}
           />
         </label>
       </div>

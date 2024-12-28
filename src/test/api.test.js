@@ -15,6 +15,16 @@ test('fetchEmails should return an array of emails', async () => {
   assert(emails.length > 0, 'fetchEmails should return at least one email');
 });
 
+test('fetchEmails should handle empty response', async () => {
+  fetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ value: [] }),
+  });
+  const emails = await fetchEmails('test-token', 'test-user');
+  assert(Array.isArray(emails), 'fetchEmails should return an array');
+  assert(emails.length === 0, 'fetchEmails should return an empty array');
+});
+
 test('fetchEmails should throw an error if the response is not ok', async () => {
   fetch.mockResolvedValueOnce({
     ok: false,
@@ -72,5 +82,48 @@ test('deleteEmail should throw an error if the response is not ok', async () => 
     assert(false, 'deleteEmail should throw an error');
   } catch (error) {
     assert(error.message.includes('HTTP error! status: 404'), 'deleteEmail should throw an error with status 404');
+  }
+});
+
+test('fetchEmails should handle rate limit and retry', async () => {
+  fetch.mockResolvedValueOnce({
+    ok: false,
+    status: 429,
+  });
+  fetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ value: [{ id: '1', subject: 'Test Email' }] }),
+  });
+  const emails = await fetchEmails('test-token', 'test-user');
+  assert(Array.isArray(emails), 'fetchEmails should return an array');
+  assert(emails.length > 0, 'fetchEmails should return at least one email');
+});
+
+test('fetchEmailContent should handle rate limit and retry', async () => {
+  fetch.mockResolvedValueOnce({
+    ok: false,
+    status: 429,
+  });
+  fetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ id: '1', subject: 'Test Email', body: { content: 'Test Content' } }),
+  });
+  const email = await fetchEmailContent('test-token', '1');
+  assert(typeof email === 'object', 'fetchEmailContent should return an object');
+  assert(email.id === '1', 'fetchEmailContent should return the correct email');
+});
+
+test('deleteEmail should handle rate limit and retry', async () => {
+  fetch.mockResolvedValueOnce({
+    ok: false,
+    status: 429,
+  });
+  fetch.mockResolvedValueOnce({
+    ok: true,
+  });
+  try {
+    await deleteEmail('test-token', '1');
+  } catch (error) {
+    assert(false, 'deleteEmail should not throw an error');
   }
 });

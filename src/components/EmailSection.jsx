@@ -1,7 +1,7 @@
 import React from 'react';
-import EmailList from '../EmailList';
-import EmailPreview from '../EmailPreview';
 import SearchBar from '../SearchBar';
+import EmailHeader from './EmailHeader';
+import EmailContent from './EmailContent';
 
 /**
  * Renders the email section.
@@ -17,6 +17,7 @@ import SearchBar from '../SearchBar';
  * @param {function} props.onSelectEmail - The function to handle email selection.
  * @param {object} props.selectedEmail - The selected email.
  * @param {function} props.onDeleteEmail - The function to handle email deletion.
+ * @param {function} props.onRetry - The function to handle retry.
  */
 function EmailSection({
   user,
@@ -30,29 +31,27 @@ function EmailSection({
   onSelectEmail,
   selectedEmail,
   onDeleteEmail,
+  onRetry,
 }) {
   return (
     <div>
-      <p>Welcome, {user?.username}!</p>
-      <button onClick={() => onSignOut(user.username)}>Sign Out</button>
-      <button onClick={toggleTheme}>Toggle Theme</button>
+      <EmailHeader user={user} onSignOut={onSignOut} toggleTheme={toggleTheme} />
       <div className="search-bar-container">
         <SearchBar onSearch={onSearch} />
       </div>
-      {loading && <p>Loading...</p>}
-      {error && <p>Error: {error}</p>}
-      <div style={{ display: 'flex' }}>
-        <div style={{ flex: 1, marginRight: '20px' }}>
-          <div className="email-list-container">
-            <EmailList emails={filteredEmails} onSelectEmail={onSelectEmail} onDeleteEmail={onDeleteEmail} />
-          </div>
+      {loading && <div className="loading-indicator"></div>}
+      {error && (
+        <div>
+          <p>Error: {error}</p>
+          {onRetry && <button onClick={onRetry}>Retry</button>}
         </div>
-        <div style={{ flex: 2 }}>
-          <div className="email-preview-container">
-            <EmailPreview email={selectedEmail} />
-          </div>
-        </div>
-      </div>
+      )}
+      <EmailContent
+        filteredEmails={filteredEmails}
+        onSelectEmail={onSelectEmail}
+        selectedEmail={selectedEmail}
+        onDeleteEmail={onDeleteEmail}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { signIn, handleRedirect, getToken, signOut, getAllAccounts } from '../auth';
 import test from './testRunner';
 import assert from './assert';
+import { InteractionRequiredAuthError } from '@azure/msal-browser';
 
 // Mock msal functions
 const mockMsalInstance = {
@@ -45,6 +46,12 @@ test('getToken should return null if no account is found', async () => {
   mockMsalInstance.getAllAccounts.mockReturnValueOnce([]);
   const token = await getToken('test-user');
   assert(token === null, 'getToken should return null if no account is found');
+});
+
+test('getToken should return null if acquireTokenSilent fails with InteractionRequiredAuthError', async () => {
+  mockMsalInstance.acquireTokenSilent.mockRejectedValueOnce(new InteractionRequiredAuthError());
+  const token = await getToken('test-user');
+  assert(token === null, 'getToken should return null if acquireTokenSilent fails with InteractionRequiredAuthError');
 });
 
 test('signOut should call logoutRedirect', async () => {

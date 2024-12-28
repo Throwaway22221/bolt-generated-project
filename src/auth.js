@@ -146,17 +146,8 @@ export const getToken = async (username) => {
     return response.accessToken;
   } catch (error) {
     if (error instanceof msal.InteractionRequiredAuthError) {
-      try {
-        log(`Interaction required for token acquisition for user: ${username}`);
-        const response = await msalInstance.acquireTokenRedirect(tokenRequest);
-        saveAccount(account, response.accessToken, response.refreshToken, response.expiresOn, storedAccounts[username].lastSync);
-        log(`Token acquired via redirect for user: ${username}`);
-        return response.accessToken;
-      } catch (redirectError) {
-        log(`Error during token redirect for user: ${username}`, redirectError);
-        console.error("Error during token redirect:", redirectError);
-        return null;
-      }
+      log(`Silent token acquisition failed for user: ${username}`);
+      return null;
     } else {
       log(`Error during token acquisition for user: ${username}`, error);
       console.error("Error during token acquisition:", error);
