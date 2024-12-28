@@ -2,7 +2,7 @@
   "name": "email-client",
   "version": "0.1.0",
   "description": "Email client with OAuth for Microsoft accounts",
-  "main": "electron.mjs",
+  "main": "electron-wrapper.cjs",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on dist/index.html && electron .\"",
